@@ -1,49 +1,63 @@
 import requests
-from bs4 import BeautifulSoup
-import json, time
+import time
+import hashlib
+import os
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# ====== CONFIG ======
 
 URL = "https://www.uz.gov.ua/about/activity/electropostachannia/electro_consumers/temporary_shutdown/grafikiobmezhen/622248/"
-CHECK_INTERVAL = 60 * 60 * 3  # 3 години
-STATE_FILE = "state.json"
+TELEGRAM_TOKEN = os.getenv("7745807427:AAHQla-yWeFh3PkxcfzACfaH-wb7Jk2ZEyM")
+CHAT_ID = os.getenv("378886424")
+CHECK_INTERVAL = 60 * 60 * 3   # 3 години
 
-BOT_TOKEN = "7745807427:AAHQla-yWeFh3PkxcfzACfaH-wb7Jk2ZEyM"
-CHAT_ID = 378886424
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+}
 
-def get_page():
-    return requests.get(URL, timeout=30).text
+# ====== TELEGRAM ======
 
-def parse_4_1(html):
-    soup = BeautifulSoup(html, "html.parser")
-    table = soup.find("table")
-    result = {}
+def send_message(text):
+    url = f"https://api.telegram.org/bot{7745807427:AAHQla-yWeFh3PkxcfzACfaH-wb7Jk2ZEyM}/sendMessage"
+    payload = {"378886424": CHAT_ID, "text": text}
+    requests.post(url, data=payload)
 
-    for row in table.find_all("tr"):
-        cols = [c.get_text(strip=True) for c in row.find_all("td")]
-        if cols and "4.1. черга" in cols[0].lower():
-            date, time_range = cols[1], cols[2]
-            result.setdefault(date, []).append(time_range)
+# ====== NETWORK SESSION ======
 
-    return result
+session = requests.Session()
 
-def notify(msg):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
+retry = Retry(
+    total=5,
+    backoff_factor=10,
+    status_forcelist=[500, 502, 503, 504],
+    allowed_methods=["GET"]
+)
 
-def load_state():
-    try:
-        return json.load(open(STATE_FILE))
-    except:
-        return {}
+adapter = HTTPAdapter(max_retries=retry)
+session.mount("https://", adapter)
 
-def save_state(data):
-    json.dump(data, open(STATE_FILE, "w"))
+# ====== STATE ======
+
+last_hash = ""
+
+# ====== MAIN LOOP ======
 
 while True:
-    old = load_state()
-    new = parse_4_1(get_page())
+    try:
+        response = session.get(URL, headers=HEADERS, timeout=60)
+        html = response.text
 
-    if new != old:
-        notify(f"⚡ Оновлення графіка 4.1:\n{new}")
-        save_state(new)
+        current_hash = hashlib.md5(html.encode()).hexdigest()
+
+        if current_hash != last_hash:
+            last_hash = current_hash
+            send_message("⚡️ Графік відключень оновився! Перевіряй сайт УЗ.")
+
+        else:
+            print("No changes")
+
+    except Exception as e:
+        print("Ukrzaliznytsia unreachable:", e)
 
     time.sleep(CHECK_INTERVAL)
