@@ -19,8 +19,8 @@ HEADERS = {
 # ====== TELEGRAM ======
 
 def send_message(text):
-    url = f"https://api.telegram.org/bot{7745807427:AAHQla-yWeFh3PkxcfzACfaH-wb7Jk2ZEyM}/sendMessage"
-    payload = {"378886424": CHAT_ID, "text": text}
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": text}
     requests.post(url, data=payload)
 
 # ====== NETWORK SESSION ======
